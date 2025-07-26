@@ -1,0 +1,5 @@
+/* This comment is a block comment */
+
+// This is a line comment
+
+var human = "human";
