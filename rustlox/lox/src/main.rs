@@ -1,15 +1,22 @@
 // Lox Interpreter
 // A simple interpreter for the Lox programming language.
-use std::env;
 
+pub mod ast;
+pub mod error;
+pub mod interpreter;
+pub mod lexer;
 pub mod lox;
+pub mod parser;
+pub mod utils;
+
+use crate::lox::Lox;
+use std::env;
 
 fn main() {
     let args = env::args().collect::<Vec<String>>();
-
     let mut lox_interpreter = match args.len() {
-        1 => lox::Lox::new(None),
-        _ => lox::Lox::new(Some(args[1].clone())),
+        1 => Lox::new(&None),
+        _ => Lox::new(&Some(args[1].clone())),
     };
 
     match args.len() {

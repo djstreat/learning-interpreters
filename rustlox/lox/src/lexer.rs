@@ -1,7 +1,7 @@
 use crate::error::LexError;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen,
@@ -15,6 +15,8 @@ pub enum TokenType {
     Semicolon,
     Slash,
     Star,
+    QuestionMark,
+    Colon,
 
     // One or two character tokens.
     Bang,
@@ -60,22 +62,24 @@ pub enum TokenType {
 pub struct Token {
     token_type: TokenType,
     lexeme: String,
-    bytes: Vec<u8>,
     line: usize,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, bytes: Vec<u8>, line: usize) -> Self {
+    pub fn new(token_type: TokenType, lexeme: String, line: usize) -> Self {
         Token {
             token_type,
             lexeme,
-            bytes,
             line,
         }
     }
 
     pub fn lexeme(&self) -> &str {
         &self.lexeme
+    }
+
+    pub fn line(&self) -> usize {
+        self.line
     }
 
     pub fn token_type(&self) -> TokenType {
@@ -117,10 +121,19 @@ impl Lexer {
             .map(|lexeme| Token {
                 token_type: TokenType::Identifier,
                 lexeme: lexeme.to_string(),
-                bytes: lexeme.as_bytes().to_vec(),
                 line: 1,
             })
             .collect()
+    }
+
+    pub fn scan_tokens(&mut self) -> Result<Vec<Token>, LexError> {
+        while !self.reached_end() {
+            self.start_index = self.current_index;
+            self.scan_token()?;
+        }
+        self.tokens
+            .push(Token::new(TokenType::Eof, String::new(), self.line_index));
+        Ok(self.tokens.clone())
     }
 
     fn advance(&mut self) -> Result<char, LexError> {
@@ -156,16 +169,13 @@ impl Lexer {
 
     fn add_token(&mut self, token_type: TokenType) {
         let lexeme = self.source[self.start_index..self.current_index].to_string();
-        let bytes = self.source[self.start_index..self.current_index]
-            .as_bytes()
-            .to_vec();
         self.tokens
-            .push(Token::new(token_type, lexeme, bytes, self.line_index));
+            .push(Token::new(token_type, lexeme, self.line_index));
     }
 
     // Handle string
     fn add_string_token(&mut self) -> Result<(), LexError> {
-        while self.peek().unwrap() != '"' && !self.reached_end() {
+        while self.peek() != Some('"') && !self.reached_end() {
             let _ = self.advance();
         }
         if self.reached_end() {
@@ -173,15 +183,8 @@ impl Lexer {
         }
         let _ = self.advance();
         let lexeme = self.source[self.start_index + 1..self.current_index - 1].to_string();
-        let bytes = self.source[self.start_index + 1..self.current_index - 1]
-            .as_bytes()
-            .to_vec();
-        self.tokens.push(Token::new(
-            TokenType::String,
-            lexeme,
-            bytes,
-            self.line_index,
-        ));
+        self.tokens
+            .push(Token::new(TokenType::String, lexeme, self.line_index));
         Ok(())
     }
 
@@ -200,15 +203,8 @@ impl Lexer {
         }
 
         let lexeme = self.source[self.start_index..self.current_index].to_string();
-        let bytes = self.source[self.start_index..self.current_index]
-            .as_bytes()
-            .to_vec();
-        self.tokens.push(Token::new(
-            TokenType::Number,
-            lexeme,
-            bytes,
-            self.line_index,
-        ));
+        self.tokens
+            .push(Token::new(TokenType::Number, lexeme, self.line_index));
         Ok(())
     }
 
@@ -237,11 +233,8 @@ impl Lexer {
             "while" => TokenType::While,
             _ => TokenType::Identifier,
         };
-        let bytes = self.source[self.start_index..self.current_index]
-            .as_bytes()
-            .to_vec();
         self.tokens
-            .push(Token::new(token_type, lexeme, bytes, self.line_index));
+            .push(Token::new(token_type, lexeme, self.line_index));
         Ok(())
     }
 
@@ -319,25 +312,6 @@ impl Lexer {
                 '0'..='9' => self.add_number_token(),
 
                 'a'..='z' | 'A'..='Z' | '_' => self.add_keyword_or_identifier_token(),
-
-                // Variables
-                'v' => match self.peek() {
-                    Some('a') => match self.peek_next() {
-                        Some('r') => {
-                            self.advance().ok();
-                            self.advance().ok();
-                            Ok(self.add_token(TokenType::Var))
-                        }
-                        _ => Err(LexError::UnexpectedCharacter(
-                            self.line_index,
-                            self.peek().unwrap(),
-                        )),
-                    },
-                    _ => Err(LexError::UnexpectedCharacter(
-                        self.line_index,
-                        self.peek().unwrap(),
-                    )),
-                },
 
                 // Ignored Lexemes
                 ' ' => Ok(()),
