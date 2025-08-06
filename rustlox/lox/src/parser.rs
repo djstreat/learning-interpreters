@@ -1,8 +1,6 @@
-use crate::ast::{Expression, LiteralValue};
-use crate::error::{ParserError, RuntimeError};
-use crate::interpreter::LoxValue;
+use crate::ast::{Expression, LiteralValue, Statement};
+use crate::error::ParserError;
 use crate::lexer::{Token, TokenType};
-use crate::utils::byte_conversion::{bytes_to_number, bytes_to_string};
 
 /// Recursive descent parser for the Lox language.
 pub struct Parser {
@@ -24,14 +22,12 @@ impl Parser {
         &self.errors
     }
 
-    pub fn parse(&mut self) -> Result<Expression, ParserError> {
-        match self.expression() {
-            Ok(expression) => Ok(expression),
-            Err(error) => {
-                self.errors.push(error.clone());
-                Err(error)
-            }
+    pub fn parse(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut statements = Vec::new();
+        while !self.is_at_end() {
+            statements.push(self.statement()?);
         }
+        Ok(statements)
     }
 }
 
@@ -93,6 +89,7 @@ impl Parser {
         }
     }
 
+    // ------------ Parsing Rules ------------
     fn primary(&mut self) -> Result<Expression, ParserError> {
         let token = self.advance();
         match token.token_type() {
@@ -176,26 +173,6 @@ impl Parser {
         Ok(expr)
     }
 
-    // Parsing Rules
-    fn expression(&mut self) -> Result<Expression, ParserError> {
-        // Parsing logic for expressions
-        let expr = self.equality()?;
-        Ok(expr)
-    }
-
-    fn equality(&mut self) -> Result<Expression, ParserError> {
-        // Parsing logic for equality expressions
-        let mut expr = self.comparison()?;
-        while self.match_token(&[TokenType::BangEqual, TokenType::EqualEqual]) {
-            expr = Expression::Binary {
-                left: Box::new(expr),
-                operator: self.previous().unwrap().clone(),
-                right: Box::new(self.comparison()?),
-            };
-        }
-        Ok(expr)
-    }
-
     fn synchronize(&mut self) {
         self.advance();
         while !self.is_at_end() {
@@ -216,5 +193,50 @@ impl Parser {
                 }
             }
         }
+    }
+
+    fn equality(&mut self) -> Result<Expression, ParserError> {
+        // Parsing logic for equality expressions
+        let mut expr = self.comparison()?;
+        while self.match_token(&[TokenType::BangEqual, TokenType::EqualEqual]) {
+            expr = Expression::Binary {
+                left: Box::new(expr),
+                operator: self.previous().unwrap().clone(),
+                right: Box::new(self.comparison()?),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn expression(&mut self) -> Result<Expression, ParserError> {
+        // Parsing logic for expressions
+        let expr = self.equality()?;
+        Ok(expr)
+    }
+
+    fn statement(&mut self) -> Result<Statement, ParserError> {
+        // Parsing logic for statements
+        match self.peek().token_type() {
+            TokenType::Print => self.print_statement(),
+            // TokenType::LeftBrace => self.block_statement(),
+            // TokenType::If => self.if_statement(),
+            // TokenType::While => self.while_statement(),
+            // TokenType::For => self.for_statement(),
+            // TokenType::Return => self.return_statement(),
+            _ => self.expression_statement(),
+        }
+    }
+
+    fn print_statement(&mut self) -> Result<Statement, ParserError> {
+        self.advance();
+        let value = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Statement::Print(value))
+    }
+
+    fn expression_statement(&mut self) -> Result<Statement, ParserError> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
+        Ok(Statement::Expr(expr))
     }
 }

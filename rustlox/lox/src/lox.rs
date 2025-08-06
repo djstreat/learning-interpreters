@@ -1,6 +1,5 @@
-use crate::ast::AstPrinter;
 use crate::interpreter::Interpreter;
-use crate::lexer::{self, Lexer, Token, TokenType};
+use crate::lexer::{Lexer, Token, TokenType};
 use crate::parser::Parser;
 use std::fs;
 use std::io::{Write, stdin, stdout};
@@ -40,9 +39,10 @@ impl Lox {
     }
 
     // Implementation for running the Lox interpreter with a script
-    pub fn run_script(&self) {
-        let _contents =
+    pub fn run_script(&mut self) {
+        let contents =
             fs::read_to_string(self.main_script.as_ref().unwrap()).expect("Could not read file");
+        self.run(contents.as_str());
     }
 
     // Run interpreter in REPL mode
@@ -78,41 +78,24 @@ impl Lox {
 
     fn print_prompt(&self) {
         print!("> ");
-        stdout().flush();
+        stdout().flush().unwrap();
     }
 
     // Implementation for running the Lox interpreter
-    fn run(&mut self, input: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.lexer = lexer::Lexer::new(Some(input.to_string()));
+    fn run(&mut self, input: &str) {
+        self.lexer = Lexer::new(Some(input.to_string()));
         let scanned_tokens = self.lexer.scan_tokens();
         if scanned_tokens.is_err() {
             self.report(0, "", &format!("{:?}", scanned_tokens.err()));
-            return Ok(());
+            return;
         }
         let mut parser = Parser::new(Some(scanned_tokens.unwrap()));
-        let parsed_expr = parser.parse();
-        if let Err(err) = parsed_expr {
+        let statements = parser.parse();
+        if let Err(err) = statements {
             self.report(0, "", &format!("{:?}", err));
-            return Ok(());
+            return;
         }
-        match parsed_expr {
-            Ok(expr) => {
-                let output = self.interpreter.interpret(&expr);
-                match output {
-                    Ok(value) => {
-                        println!("{}", value);
-                        Ok(())
-                    }
-                    Err(err) => {
-                        self.report(0, "", &format!("{:?}", err));
-                        Ok(())
-                    }
-                }
-            }
-            Err(err) => {
-                self.report(0, "", &format!("{:?}", err));
-                Ok(())
-            }
-        }
+        self.interpreter
+            .interpret(statements.unwrap().as_mut_slice());
     }
 }

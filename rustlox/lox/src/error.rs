@@ -1,4 +1,5 @@
 use crate::lexer::Token;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LexError {
@@ -46,22 +47,6 @@ pub enum RuntimeError {
 }
 
 impl ParserError {
-    pub fn new_invalid_operand(line: usize, token: Token, msg: String) -> Self {
-        ParserError::InvalidOperand { line, token, msg }
-    }
-
-    pub fn new_no_previous_token(line: usize, msg: String) -> Self {
-        ParserError::NoPreviousToken { line, msg }
-    }
-
-    pub fn new_unexpected_token(line: usize, token: Token, msg: String) -> Self {
-        ParserError::UnexpectedToken { line, token, msg }
-    }
-
-    pub fn new_unexpected_eof(line: usize, msg: String) -> Self {
-        ParserError::UnexpectedEOF { line, msg }
-    }
-
     pub fn line(&self) -> usize {
         match self {
             ParserError::ExpectedExpression { line, .. } => *line,
@@ -103,5 +88,40 @@ impl ParserError {
                 "Functionality not implemented".to_string()
             }
         }
+    }
+}
+
+impl RuntimeError {
+    pub fn message(&self) -> String {
+        match self {
+            RuntimeError::CannotAssignToConstant { line, name } => {
+                format!(
+                    "ERROR at line {}: Cannot assign to constant '{}'",
+                    line, name
+                )
+            }
+            RuntimeError::CannotAssignToFunction { line, name } => {
+                format!(
+                    "ERROR at line {}: Cannot assign to function '{}'",
+                    line, name
+                )
+            }
+            RuntimeError::CannotAssignToNumber { line, name } => {
+                format!("ERROR at line {}: Cannot assign to number '{}'", line, name)
+            }
+            RuntimeError::UndefinedVariable { line, name } => {
+                format!("ERROR at line {}: Undefined variable '{}'", line, name)
+            }
+            RuntimeError::TypeError { line, msg } => {
+                format!("ERROR at line {}: Type error: {}", line, msg)
+            }
+            _ => "Unknown runtime error".to_string(),
+        }
+    }
+}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message())
     }
 }

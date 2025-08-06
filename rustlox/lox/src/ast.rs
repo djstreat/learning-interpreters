@@ -1,6 +1,6 @@
-use crate::error::ParserError;
+use crate::error::{ParserError, RuntimeError};
 use crate::lexer::{Token, TokenType};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 pub trait ExpressionVisitor<T> {
     fn visit_literal(&mut self, value: &LiteralValue) -> T;
@@ -8,6 +8,11 @@ pub trait ExpressionVisitor<T> {
     fn visit_binary(&mut self, left: &Expression, operator: &Token, right: &Expression) -> T;
     fn visit_unary(&mut self, operator: &Token, right: &Expression) -> T;
     fn visit_variable(&mut self, name: &str) -> T;
+}
+
+pub trait StatementVisitor {
+    fn visit_expression_statement(&mut self, expr: &Expression) -> Result<(), RuntimeError>;
+    fn visit_print(&mut self, expr: &Expression) -> Result<(), RuntimeError>;
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +49,11 @@ pub enum Expression {
         right: Box<Expression>,
     },
     Variable(String),
+}
+
+pub enum Statement {
+    Expr(Expression),
+    Print(Expression),
 }
 
 impl Expression {
@@ -119,7 +129,7 @@ impl ExpressionVisitor<String> for AstPrinter {
 }
 
 impl Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Expression::Literal { value } => write!(f, "{}", value),
             Expression::Grouped(expr) => write!(f, "({})", expr),
@@ -215,6 +225,15 @@ impl Expression {
             Expression::Variable(_) => Err(ParserError::FunctionalityNotImplemented(
                 "Variable functionality not implemented".to_string(),
             )),
+        }
+    }
+}
+
+impl Statement {
+    pub fn accept(&self, visitor: &mut dyn StatementVisitor) -> Result<(), RuntimeError> {
+        match self {
+            Statement::Expr(expr) => visitor.visit_expression_statement(expr),
+            Statement::Print(expr) => visitor.visit_print(expr),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::ast::{Expression, ExpressionVisitor, LiteralValue};
+use crate::ast::{Expression, ExpressionVisitor, LiteralValue, Statement, StatementVisitor};
 use crate::error::RuntimeError;
 use crate::lexer::{Token, TokenType};
 use std::collections::HashMap;
@@ -43,9 +43,21 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    pub fn interpret(&mut self, expression: &Expression) -> Result<String, RuntimeError> {
-        let value = self.evaluate(expression)?;
-        Ok(value.stringify())
+    fn execute(&mut self, stmt: &Statement) -> Result<(), RuntimeError> {
+        stmt.accept(self)
+    }
+
+    pub fn interpret(&mut self, statements: &[Statement]) {
+        for statement in statements {
+            let res = match self.execute(statement) {
+                Ok(_) => Ok(()),
+                Err(err) => Err(err),
+            };
+            match res {
+                Err(err) => panic!("{}", err),
+                _ => (),
+            }
+        }
     }
 }
 
@@ -207,5 +219,18 @@ impl ExpressionVisitor<Result<LoxValue, RuntimeError>> for Interpreter {
             line: 0,
             name: name.to_string(),
         })
+    }
+}
+
+impl StatementVisitor for Interpreter {
+    fn visit_expression_statement(&mut self, expr: &Expression) -> Result<(), RuntimeError> {
+        self.evaluate(expr)?;
+        Ok(())
+    }
+
+    fn visit_print(&mut self, expr: &Expression) -> Result<(), RuntimeError> {
+        let value = self.evaluate(expr)?;
+        println!("{}", value.stringify());
+        Ok(())
     }
 }

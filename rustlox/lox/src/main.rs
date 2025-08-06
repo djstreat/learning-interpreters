@@ -7,8 +7,6 @@ pub mod interpreter;
 pub mod lexer;
 pub mod lox;
 pub mod parser;
-pub mod utils;
-
 use crate::lox::Lox;
 use std::env;
 
