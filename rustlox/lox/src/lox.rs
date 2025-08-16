@@ -33,7 +33,7 @@ impl Lox {
         Lox {
             main_script: script_path.clone(),
             has_error: false,
-            lexer: lexer,
+            lexer,
             interpreter: Interpreter::new(),
         }
     }
@@ -65,7 +65,7 @@ impl Lox {
 
     // Report an error with a line number and message
     pub fn report(&self, line: usize, where_: &str, message: &str) {
-        eprintln!("[line {}] Error{}: {}", line, where_, message);
+        println!("[line {line}] Error{where_}: {message}");
     }
 
     fn error(&mut self, token: Token, line: usize, message: &str) {
@@ -92,7 +92,7 @@ impl Lox {
         let mut parser = Parser::new(Some(scanned_tokens.unwrap()));
         let statements = parser.parse();
         if let Err(err) = statements {
-            self.report(0, "", &format!("{:?}", err));
+            self.report(0, "", &format!("{err:?}"));
             return;
         }
         self.interpreter

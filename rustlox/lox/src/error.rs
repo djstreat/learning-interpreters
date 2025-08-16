@@ -22,9 +22,18 @@ pub enum ParserError {
         token: Token,
         msg: String,
     },
+    InvalidAssignmentTarget {
+        line: usize,
+        token: Token,
+        msg: String,
+    },
     NoPreviousToken {
         line: usize,
         msg: String,
+    },
+    ReservedWord {
+        line: usize,
+        word: String,
     },
     UnexpectedToken {
         line: usize,
@@ -51,7 +60,9 @@ impl ParserError {
         match self {
             ParserError::ExpectedExpression { line, .. } => *line,
             ParserError::InvalidOperand { line, .. } => *line,
+            ParserError::InvalidAssignmentTarget { line, .. } => *line,
             ParserError::NoPreviousToken { line, .. } => *line,
+            ParserError::ReservedWord { line, .. } => *line,
             ParserError::UnexpectedToken { line, .. } => *line,
             ParserError::UnexpectedEOF { line, .. } => *line,
             ParserError::FunctionalityNotImplemented(_) => 0,
@@ -72,8 +83,17 @@ impl ParserError {
                     line, token, msg
                 )
             }
+            ParserError::InvalidAssignmentTarget { line, token, msg } => {
+                format!(
+                    "Invalid assignment target at line {}, token {:?}: {}",
+                    line, token, msg
+                )
+            }
             ParserError::NoPreviousToken { line, msg } => {
                 format!("No previous token at line {}: {}", line, msg)
+            }
+            ParserError::ReservedWord { line, word } => {
+                format!("Reserved word at line {}: {}", line, word)
             }
             ParserError::UnexpectedToken { line, token, msg } => {
                 format!(
@@ -115,7 +135,6 @@ impl RuntimeError {
             RuntimeError::TypeError { line, msg } => {
                 format!("ERROR at line {}: Type error: {}", line, msg)
             }
-            _ => "Unknown runtime error".to_string(),
         }
     }
 }

@@ -33,7 +33,7 @@ impl Parser {
 
 impl Parser {
     fn is_at_end(&self) -> bool {
-        self.current >= self.tokens.len()
+        self.current >= self.tokens.len() || self.peek().token_type() == TokenType::Eof
     }
 
     fn peek(&self) -> &Token {
@@ -112,6 +112,10 @@ impl Parser {
                 let expr = self.expression()?;
                 let _ = self.consume(TokenType::RightParen, "Expect ')' after expression.");
                 Ok(Expression::Grouped(Box::new(expr)))
+            }
+            TokenType::Identifier => {
+                let name = self.previous().unwrap().clone();
+                Ok(Expression::Variable(name.lexeme().to_string()))
             }
             _ => Err(ParserError::ExpectedExpression {
                 line: token.line(),
@@ -208,17 +212,70 @@ impl Parser {
         Ok(expr)
     }
 
+    fn assignment(&mut self) -> Result<Expression, ParserError> {
+        let expr = self.equality()?;
+        if self.match_token(&[TokenType::Equal]) {
+            let equals = self.previous().unwrap().clone();
+            let value = self.assignment()?;
+            if let Expression::Variable(name) = expr {
+                Ok(Expression::Assign {
+                    name,
+                    value: Box::new(value),
+                })
+            } else {
+                Err(ParserError::InvalidAssignmentTarget {
+                    line: equals.line(),
+                    token: equals,
+                    msg: "Invalid assignment target.".to_string(),
+                })
+            }
+        } else {
+            Ok(expr)
+        }
+    }
+
     fn expression(&mut self) -> Result<Expression, ParserError> {
         // Parsing logic for expressions
         let expr = self.equality()?;
         Ok(expr)
     }
 
+    fn var_declaration(&mut self) -> Result<Statement, ParserError> {
+        // Parsing logic for variable declarations
+        let name = self.consume(TokenType::Identifier, "Expect variable name.")?;
+        let name_string = name.lexeme().to_string();
+        self.consume(TokenType::Equal, "Expect '=' after variable name.")?;
+        let initializer = self.expression()?;
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Statement::Variable {
+            name: name_string,
+            initializer: Some(initializer),
+        })
+    }
+
+    fn declaration(&mut self) -> Result<Statement, ParserError> {
+        // Parsing logic for declarations
+        match self.peek().token_type() {
+            TokenType::Var => return self.var_declaration(),
+            _ => {
+                &self.synchronize();
+                return Err(ParserError::UnexpectedToken {
+                    line: self.peek().line(),
+                    token: self.peek().clone(),
+                    msg: format!("Expected 'var' keyword, found {}", self.peek().lexeme()),
+                });
+            }
+        };
+    }
+
     fn statement(&mut self) -> Result<Statement, ParserError> {
         // Parsing logic for statements
         match self.peek().token_type() {
             TokenType::Print => self.print_statement(),
-            // TokenType::LeftBrace => self.block_statement(),
+            TokenType::LeftBrace => Ok(Statement::Block(self.block()?)),
             // TokenType::If => self.if_statement(),
             // TokenType::While => self.while_statement(),
             // TokenType::For => self.for_statement(),
@@ -238,5 +295,15 @@ impl Parser {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
         Ok(Statement::Expr(expr))
+    }
+
+    fn block(&mut self) -> Result<Vec<Statement>, ParserError> {
+        let mut statements = Vec::new();
+        self.advance();
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(statements)
     }
 }

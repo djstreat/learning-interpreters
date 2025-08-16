@@ -1,7 +1,9 @@
-use crate::ast::{Expression, ExpressionVisitor, LiteralValue, Statement, StatementVisitor};
+use crate::ast::{
+    DeclarationVisitor, Expression, ExpressionVisitor, LiteralValue, Statement, StatementVisitor,
+};
+use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::lexer::{Token, TokenType};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LoxValue {
@@ -31,13 +33,14 @@ impl LoxValue {
 }
 
 pub struct Interpreter {
-    pub globals: HashMap<String, LoxValue>,
+    env: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
-        let mut globals = HashMap::new();
-        Self { globals }
+        Self {
+            env: Environment::new(),
+        }
     }
     pub fn evaluate(&mut self, expr: &Expression) -> Result<LoxValue, RuntimeError> {
         expr.accept(self)
@@ -45,6 +48,27 @@ impl Interpreter {
 
     fn execute(&mut self, stmt: &Statement) -> Result<(), RuntimeError> {
         stmt.accept(self)
+    }
+
+    fn execute_block(
+        &mut self,
+        statements: &[Statement],
+        env: &Environment,
+    ) -> Result<(), RuntimeError> {
+        let previous_env = self.env.clone();
+        self.env = env.clone();
+        for statement in statements {
+            let res = match self.execute(statement) {
+                Ok(_) => Ok(()),
+                Err(err) => Err(err),
+            };
+            match res {
+                Err(err) => panic!("{}", err),
+                _ => (),
+            }
+        }
+        self.env = previous_env;
+        Ok(())
     }
 
     pub fn interpret(&mut self, statements: &[Statement]) {
@@ -215,10 +239,16 @@ impl ExpressionVisitor<Result<LoxValue, RuntimeError>> for Interpreter {
     }
 
     fn visit_variable(&mut self, name: &str) -> Result<LoxValue, RuntimeError> {
-        Err(RuntimeError::UndefinedVariable {
-            line: 0,
-            name: name.to_string(),
-        })
+        match self.env.get(name) {
+            Ok(value) => Ok(value.clone()),
+            Err(err) => Err(err),
+        }
+    }
+
+    fn visit_assign(&mut self, name: &str, value: &Expression) -> Result<LoxValue, RuntimeError> {
+        let value = self.evaluate(value)?;
+        self.env.assign(name, value.clone())?;
+        Ok(value)
     }
 }
 
@@ -232,5 +262,48 @@ impl StatementVisitor for Interpreter {
         let value = self.evaluate(expr)?;
         println!("{}", value.stringify());
         Ok(())
+    }
+
+    fn visit_var_statement(
+        &mut self,
+        name: &str,
+        initializer: &Expression,
+    ) -> Result<(), RuntimeError> {
+        let value = self.evaluate(initializer)?;
+        self.env.set(name, value);
+        Ok(())
+    }
+
+    fn visit_block(&mut self, statements: &[Statement]) -> Result<(), RuntimeError> {
+        self.execute_block(statements, &self.env.clone())?;
+        Ok(())
+    }
+}
+
+impl DeclarationVisitor for Interpreter {
+    fn visit_var_declaration(&mut self, statement: &Statement) -> Result<(), RuntimeError> {
+        match statement {
+            Statement::Expr(expr) => {
+                self.evaluate(expr)?;
+                Ok(())
+            }
+            Statement::Print(expr) => {
+                let value = self.evaluate(expr)?;
+                println!("{}", value.stringify());
+                Ok(())
+            }
+            Statement::Variable { name, initializer } => {
+                let value = match initializer {
+                    Some(expr) => self.evaluate(expr)?,
+                    None => LoxValue::Nil,
+                };
+                self.env.set(name, value);
+                Ok(())
+            }
+            Statement::Block(statements) => {
+                self.execute_block(statements, &Environment::new())?;
+                Ok(())
+            }
+        }
     }
 }

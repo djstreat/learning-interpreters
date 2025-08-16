@@ -8,14 +8,32 @@ pub trait ExpressionVisitor<T> {
     fn visit_binary(&mut self, left: &Expression, operator: &Token, right: &Expression) -> T;
     fn visit_unary(&mut self, operator: &Token, right: &Expression) -> T;
     fn visit_variable(&mut self, name: &str) -> T;
+    fn visit_assign(&mut self, name: &str, value: &Expression) -> T;
 }
 
 pub trait StatementVisitor {
     fn visit_expression_statement(&mut self, expr: &Expression) -> Result<(), RuntimeError>;
     fn visit_print(&mut self, expr: &Expression) -> Result<(), RuntimeError>;
+    fn visit_var_statement(
+        &mut self,
+        name: &str,
+        initializer: &Expression,
+    ) -> Result<(), RuntimeError>;
+    fn visit_block(&mut self, statements: &[Statement]) -> Result<(), RuntimeError>;
 }
 
-#[derive(Debug, Clone)]
+pub trait DeclarationVisitor {
+    fn visit_var_declaration(&mut self, statement: &Statement) -> Result<(), RuntimeError>;
+    // fn visit_function(
+    //     &mut self,
+    //     name: &str,
+    //     params: &[String],
+    //     body: &Vec<Statement>,
+    // ) -> Result<(), RuntimeError>;
+    // fn visit_class(&mut self, name: &str, members: &[Declaration]) -> Result<(), RuntimeError>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
     Number(f64),
     String(String),
@@ -49,11 +67,38 @@ pub enum Expression {
         right: Box<Expression>,
     },
     Variable(String),
+    Assign {
+        name: String,
+        value: Box<Expression>,
+    },
 }
 
+#[derive(Debug, Clone)]
 pub enum Statement {
     Expr(Expression),
     Print(Expression),
+    Variable {
+        name: String,
+        initializer: Option<Expression>,
+    },
+    Block(Vec<Statement>),
+}
+
+#[derive(Debug, Clone)]
+pub enum Declaration {
+    Variable {
+        name: String,
+        initializer: Option<Expression>,
+    },
+    // Class {
+    //     name: String,
+    //     members: &'a [Declaration<'a>],
+    // },
+    // Function {
+    //     name: String,
+    //     params: Vec<String>,
+    //     body: Vec<Statement>,
+    // },
 }
 
 impl Expression {
@@ -69,6 +114,7 @@ impl Expression {
             } => visitor.visit_binary(left, operator, right),
             Expression::Unary { operator, right } => visitor.visit_unary(operator, right),
             Expression::Variable(name) => visitor.visit_variable(name),
+            Expression::Assign { name, value } => visitor.visit_assign(name, value),
         }
     }
 }
@@ -126,6 +172,10 @@ impl ExpressionVisitor<String> for AstPrinter {
     fn visit_variable(&mut self, name: &str) -> String {
         name.to_string()
     }
+
+    fn visit_assign(&mut self, name: &str, value: &Expression) -> String {
+        self.parenthesize(name, &[value])
+    }
 }
 
 impl Display for Expression {
@@ -144,6 +194,9 @@ impl Display for Expression {
                 write!(f, "({} {})", operator, right)
             }
             Expression::Variable(name) => write!(f, "{}", name),
+            Expression::Assign { name, value } => {
+                write!(f, "{} = {}", name, value)
+            }
         }
     }
 }
@@ -225,6 +278,11 @@ impl Expression {
             Expression::Variable(_) => Err(ParserError::FunctionalityNotImplemented(
                 "Variable functionality not implemented".to_string(),
             )),
+            Expression::Assign { name: _, value: _ } => {
+                Err(ParserError::FunctionalityNotImplemented(
+                    "Assign functionality not implemented".to_string(),
+                ))
+            }
         }
     }
 }
@@ -234,6 +292,36 @@ impl Statement {
         match self {
             Statement::Expr(expr) => visitor.visit_expression_statement(expr),
             Statement::Print(expr) => visitor.visit_print(expr),
+            Statement::Variable { name, initializer } => {
+                // Handle the case where initializer might be None
+                match initializer {
+                    Some(init_expr) => visitor.visit_var_statement(name, init_expr),
+                    None => {
+                        // Create a default nil expression for uninitialized variables
+                        let nil_expr = Expression::Literal {
+                            value: LiteralValue::Nil,
+                        };
+                        visitor.visit_var_statement(name, &nil_expr)
+                    }
+                }
+            }
+            Statement::Block(statements) => visitor.visit_block(statements),
+        }
+    }
+}
+
+impl Declaration {
+    pub fn accept(&self, visitor: &mut dyn DeclarationVisitor) -> Result<(), RuntimeError> {
+        match self {
+            Declaration::Variable { name, initializer } => {
+                visitor.visit_var_declaration(&Statement::Variable {
+                    name: name.clone(),
+                    initializer: initializer.clone(),
+                })
+            } // Declaration::Class { name, members } => visitor.visit_class(name, &members),
+              // Declaration::Function { name, params, body } => {
+              //     visitor.visit_function(name, params, body)
+              // }
         }
     }
 }
